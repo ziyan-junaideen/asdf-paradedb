@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() { echo "asdf-paradedb: $*" >&2; exit 1; }
+
+install_type="${1:-}"
+version="${2:-${ASDF_INSTALL_VERSION:-}}"
+install_path="${3:-${ASDF_INSTALL_PATH:-}}"
+download_path="${ASDF_DOWNLOAD_PATH:-}"
+
+[[ "$install_type" == "version" ]] || fail "unsupported install type: ${install_type:-<empty>}"
+[[ -n "$version" ]] || fail "missing version"
+[[ -n "$install_path" ]] || fail "missing install path"
+
+mkdir -p "$install_path"
+
+# Prefer a pre-downloaded artifact from bin/download.
+# If ASDF_DOWNLOAD_PATH isn't set (some callers), we self-download.
+cleanup_download=""
+if [[ -z "$download_path" ]]; then
+  download_path="$(mktemp -d)"
+  cleanup_download="1"
+  export ASDF_INSTALL_VERSION="$version"
+  export ASDF_DOWNLOAD_PATH="$download_path"
+  "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/download"
+fi
+
+pkg="$(find "$download_path" -maxdepth 1 -type f -name '*.pkg' | head -n 1 || true)"
+[[ -n "$pkg" ]] || fail "no .pkg found in download path: $download_path"
+
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"; [[ -n "$cleanup_download" ]] && rm -rf "$download_path"' EXIT
+
+pkgutil --expand-full "$pkg" "$tmpdir/expanded"
+
+# The ParadeDB pkgs expand into a Payload/ directory containing:
+#   - lib/postgresql/pg_search.dylib
+#   - share/postgresql@<PG_MAJOR>/extension/*
+rsync -a "$tmpdir/expanded/Payload/" "$install_path/"
+
+echo "asdf-paradedb: installed pg_search files into $install_path" >&2

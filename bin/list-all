@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# List available ParadeDB versions (tags) for asdf/mise.
+# We use git tags to avoid GitHub API rate limits and auth.
+
+git ls-remote --tags --refs https://github.com/paradedb/paradedb.git \
+  | awk '{print $2}' \
+  | sed -E 's#^refs/tags/v##' \
+  | sort -V
